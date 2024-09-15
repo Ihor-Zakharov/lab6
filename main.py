@@ -2,7 +2,11 @@ import tkinter as tk
 import customtkinter as ctk 
 from abc import ABC, abstractmethod
 from datetime import datetime
+import sys
+
+# re is meant to be used to check date format in BL method(s)
 import re
+
 
 #region System setting
 
@@ -31,7 +35,6 @@ class SingletonMeta(type):
 
     # "*" allows to take n arguments, the same can be atchieved with a spread operator in JS (...)
     def __call__(cls, *args, **kwargs):
-        print(cls._instances)
         if cls not in cls._instances:
             #super class is type, type defines how classes work in python (similar to constructor)
             cls._instances[cls] = super().__call__(*args, **kwargs)
@@ -83,6 +86,24 @@ class BL(metaclass=SingletonMeta):
             return ageVerb["rest"]
         else:
             return ageVerb["2-4"]
+        
+    @staticmethod
+    def getAge(ageStr: str) -> int:
+        try: 
+            date_obj: datetime = datetime.strptime(ageStr, "%d.%m.%Y")
+        except:
+            raise ValueError("An error occured while parsing date string to an object (check the format)")
+
+            #code below works like arr1.every((e, i) => e < arr2[i]) in JS
+        hadNoBirthdayThisYear = (datetime.today().day, datetime.today().month) < (date_obj.day, date_obj.month)
+        #bool var hadNoBirthdayThisYear is being converted to either 1 or 0
+        return datetime.today().year - date_obj.year - hadNoBirthdayThisYear
+    
+    @staticmethod
+    def getMessage(name: str, ageStr: str) -> str:
+        age = BL.getAge(ageStr)
+
+        return (f"{msgVerb["0"]}{name}{msgVerb["1"]}{str(age)} {BL.getAgeVerb(age)}{msgVerb["2"]}{BL.countDigitsSum(ageStr)}{msgVerb["3"]}")
 
 #endregion
 
@@ -111,25 +132,33 @@ class UI(metaclass=SingletonMeta):
 
     def onSubmit(self):
         try:
-            date_obj: datetime = datetime.strptime(self.dateForm.get(), "%d.%m.%Y")
+            message = BL.getMessage(self.nameForm.get(), self.dateForm.get())
 
-            #code below works like arr1.every((e, i) => e < arr2[i]) in JS
-            hadNoBirthdayThisYear = (datetime.today().day, datetime.today().month) < (date_obj.day, date_obj.month)
-            #bool var hadNoBirthdayThisYear is being converted to either 1 or 0
-            age = datetime.today().year - date_obj.year - hadNoBirthdayThisYear
-
-            message = (f"{msgVerb["0"]}{self.nameForm.get()}{msgVerb["1"]}{str(age)} {BL.getAgeVerb(age)}{msgVerb["2"]}{BL.countDigitsSum(self.dateForm.get())}{msgVerb["3"]}")
-
-            print(message)
-            
             self.msg.configure(text=message)
         except ValueError:
             self.msg.configure(text="Дата має бути у форматі DD.MM.YYYY")
 
 #endregion
 
+#region Console 
+
+class ConsoleScript(metaclass=SingletonMeta):
+    @staticmethod
+    def run():
+        name = input(f"{verbiage["enterName"]}: ")
+        date = input(f"{verbiage["enterBirthDate"]}: ")
+
+        print(BL.getMessage(name, date))
+
+
+#endregion
+
 # Run app
 
-ui = UI(app)
-
-app.mainloop()
+if (sys.argv[1] == "console"):
+    ConsoleScript.run()
+elif (sys.argv[1] == "ui"):
+    ui = UI(app)
+    app.mainloop()
+else: 
+    raise ValueError("App has been run with wrong args")
