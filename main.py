@@ -2,7 +2,7 @@ import tkinter as tk
 import customtkinter as ctk 
 from abc import ABC, abstractmethod
 from datetime import datetime
-import sys
+from enum import Enum
 
 # re is meant to be used to check date format in BL method(s)
 import re
@@ -29,16 +29,9 @@ app.bind_all("<Button-1>", lambda event: event.widget.focus_set())
 #region Core helpers
 
 # metaclasses essentially work like decorators, but for classes, i.e., some sort of fabric pattern is being used
-class SingletonMeta(type):
-    # static field (_ - static, __ - private)
-    _instances = {}
-
-    # "*" allows to take n arguments, the same can be atchieved with a spread operator in JS (...)
-    def __call__(cls, *args, **kwargs):
-        if cls not in cls._instances:
-            #super class is type, type defines how classes work in python (similar to constructor)
-            cls._instances[cls] = super().__call__(*args, **kwargs)
-        return cls._instances[cls]
+class Operations(Enum):
+    Undefined = 0,
+    Add = 1,
     
 #endregion
     
@@ -66,99 +59,116 @@ verbiage = {
 #endregion
 
 #region BL
-class BL(metaclass=SingletonMeta):
-    @staticmethod
-    def countDigitsSum(dateStr: str) -> int:
-      #check the format properly
 
-      # if re.match(r'^\d{2}\.\d{2}\.\d{4}$', dateStr):
-        # raise ValueError("The format of date should be DD.MM.YYYY")
-      # in JS for (const c of str) { sum += Numbere(c) }
-      return sum(int(char) for char in dateStr if char.isdigit())
-      
-    @staticmethod
-    def getAgeVerb(age: int) -> str:
-        ageVerbSecondCondition = age == 0 or age % 100 == 12 or age % 100 == 13 or age % 100 == 14 or (age % 10 != 2 and age % 10 != 3 and age % 10 != 4)
+#add getters and setters
+class BL():
+    def __init__(self):
+        self.firstArgStr = ctk.StringVar(value="0")
+        self.secondArgStr = "0"
+        self.operation = Operations.Undefined
 
-        if age == 1:
-            return ageVerb["1"]
-        elif ageVerbSecondCondition:
-            return ageVerb["rest"]
-        else:
-            return ageVerb["2-4"]
+
+    @staticmethod
+    def concatArg(arg: str, char: int | str):
+        if (float(arg) == 0):
+            if (int(char) == 0):
+                return
+            else: 
+                return char
         
-    @staticmethod
-    def getAge(ageStr: str) -> int:
-        try: 
-            date_obj: datetime = datetime.strptime(ageStr, "%d.%m.%Y")
-        except:
-            raise ValueError("An error occured while parsing date string to an object (check the format)")
-
-            #code below works like arr1.every((e, i) => e < arr2[i]) in JS
-        hadNoBirthdayThisYear = (datetime.today().day, datetime.today().month) < (date_obj.day, date_obj.month)
-        #bool var hadNoBirthdayThisYear is being converted to either 1 or 0
-        return datetime.today().year - date_obj.year - hadNoBirthdayThisYear
+        if not BL.isValidArg(char):
+            raise ValueError(f"A character other than '.' ({char}) has been added") 
+        
+        return arg + char
     
     @staticmethod
-    def getMessage(name: str, ageStr: str) -> str:
-        age = BL.getAge(ageStr)
+    def isValidArg(arg: str):
+        return bool(re.fullmatch(r'\d+(\.\d+)?', arg))
+    
+    def concatFirstArg(self, char: int | str):
+        self.firstArgStr.set(BL.concatArg(self.firstArgStr.get(), char))
+        print(self.firstArgStr.get())
+    
+    def concatSecondArg(self, char: int | str):
+        self.secondArgStr = BL.concatArg(self.secondArgStr, char)
+    
+    def concatCurrentArg(self, char: int | str):
+        if self.operation.value == Operations.Undefined.value:
+            self.concatFirstArg(char)
+            return
+        
+        self.concatSecondArg(char)
 
-        return (f"{msgVerb["0"]}{name}{msgVerb["1"]}{str(age)} {BL.getAgeVerb(age)}{msgVerb["2"]}{BL.countDigitsSum(ageStr)}{msgVerb["3"]}")
+    def setOperation(self, operation: Operations):
+        self.operation = operation
 
+    def fireResult(self):
+        if (self.operation == Operations.Add):
+            self.firstArgStr.set(str(float(self.firstArgStr.get()) + float(self.secondArgStr)))
+            self.secondArgStr = "0"
+    
+    # @property 
+    # def firstArgStr(self):
+    #     return self.__firstArgStr
+    
+    # @property 
+    # def secondArgStr(self):
+    #     return self.__secondArgStr
+    
+    # @secondArgStr.setter
+    # def secondArgStr(self, newValue: str):
+    #     if (BL.isValidArg(newValue)):
+    #         self.secondArgStr = newValue
+
+    # @firstArgStr.setter
+    # def firstArgStr(self, newValue: str):
+    #     if (BL.isValidArg(newValue)):
+    #         self.secondArgStr = newValue
+        
 #endregion
 
 #region UI
 
-class UI(metaclass=SingletonMeta):
+#Add type to handler
+class CharButton():
+    def __init__(self, app, value: str, handler):
+        if (not BL.isValidArg(value)):
+            raise ValueError(f"Wrong value has been binded to char button: {value}")
+        
+        self.__app = app
+
+        self.element = ctk.CTkButton(self.__app, height=40, width=40, text=value, command=lambda: handler(value))
+
+    def pack(self):
+        self.element.pack()
+
+class UI():
     def __init__(self, app):
         self.__app = app
 
-        self.nameForm = ctk.CTkEntry(self.__app, height=40, width=350, placeholder_text=verbiage["enterName"])
-        
-        self.dateForm = ctk.CTkEntry(self.__app, height=40, width=350, placeholder_text=verbiage["enterBirthDate"])
+        self.bl = BL()
 
-        self.buttomSubmit = ctk.CTkButton(self.__app, height=40, width=350, text=verbiage["submit"], command=self.onSubmit)
+        self.mountArgControls()
+        self.mountForm()
+        self.mountOperationsControls()
 
-        self.msg = ctk.CTkLabel(self.__app, text="")
-
-        self.mountElements()
-    
-    def mountElements(self):
-        self.nameForm.pack(pady=20)
-        self.dateForm.pack(pady=20)
-        self.buttomSubmit.pack(pady=20)
+    def mountForm(self):
+        self.msg = ctk.CTkLabel(self.__app, textvariable=self.bl.firstArgStr)
         self.msg.pack()
 
+    def mountOperationsControls(self):
+        buttonAdd = ctk.CTkButton(self.__app, height=40, width=40, text="+", command=lambda: self.bl.setOperation(Operations.Add))
+        buttonEquals = ctk.CTkButton(self.__app, height=40, width=40, text="=", command=self.bl.fireResult)
 
-    def onSubmit(self):
-        try:
-            message = BL.getMessage(self.nameForm.get(), self.dateForm.get())
+        buttonAdd.pack()
+        buttonEquals.pack()
 
-            self.msg.configure(text=message)
-        except ValueError:
-            self.msg.configure(text="Дата має бути у форматі DD.MM.YYYY")
+    def mountArgControls(self):
+        for i in range(0, 10):
+            valueStr = str(i)
 
-#endregion
+            button = CharButton(self.__app, valueStr, handler=self.bl.concatCurrentArg)
+            button.pack()
 
-#region Console 
-
-class ConsoleScript(metaclass=SingletonMeta):
-    @staticmethod
-    def run():
-        name = input(f"{verbiage["enterName"]}: ")
-        date = input(f"{verbiage["enterBirthDate"]}: ")
-
-        print(BL.getMessage(name, date))
-
-
-#endregion
-
-# Run app
-
-if (sys.argv[1] == "console"):
-    ConsoleScript.run()
-elif (sys.argv[1] == "ui"):
-    ui = UI(app)
-    app.mainloop()
-else: 
-    raise ValueError("App has been run with wrong args")
+ui = UI(app)
+app.mainloop()
