@@ -4,58 +4,28 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
 
-# re is meant to be used to check date format in BL method(s)
 import re
-
-
-#region System setting
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
-#endregion
-
-#region App frame
-
 app = ctk.CTk()
 app.geometry("720x480")
 
-# bind method has nothing to do with function propotype bind in JS. It is an equivalent to element.addEventListener
 app.bind_all("<Button-1>", lambda event: event.widget.focus_set())
-# lambda is an equivalent for () => {} (anon func) in JS
 
-#endregion
-
-#region Core helpers
-
-# metaclasses essentially work like decorators, but for classes, i.e., some sort of fabric pattern is being used
 class Operations(Enum):
     Undefined = 0,
     Add = 1,
+    Sub = 2,
+    Mul = 3,
+    Div = 4,
+    Pow = 5
     
 #endregion
     
 #region Verbige
-    
-ageVerb = {
-    "1": "рік",
-    "2-4": "роки",
-    "rest": "років"
-}
 
-msgVerb = {
-    "0": "Вітаю, ",
-    "1": ", вам ",
-    "2": ". Сума цифр дати народження: ",
-    "3": ". Слава Україні!"
-}
-
-verbiage = {
-  "enterName": "Введіть своє ім'я",
-  "enterBirthDate": "Введіть дату народження (у форматі 11.11.1990)",
-  "submit": "зберегти"
-} 
-    
 #endregion
 
 #region BL
@@ -64,7 +34,7 @@ verbiage = {
 class BL():
     def __init__(self):
         self.firstArgStr = ctk.StringVar(value="0")
-        self.secondArgStr = "0"
+        self.secondArgStr = ctk.StringVar(value="0")
         self.operation = Operations.Undefined
 
 
@@ -72,25 +42,41 @@ class BL():
     def concatArg(arg: str, char: int | str):
         if (float(arg) == 0):
             if (int(char) == 0):
-                return
+                return 0
             else: 
                 return char
-        
-        if not BL.isValidArg(char):
-            raise ValueError(f"A character other than '.' ({char}) has been added") 
+            
+        if char == "." and "." in arg:
+            return arg 
         
         return arg + char
     
     @staticmethod
     def isValidArg(arg: str):
+        if arg == "0":
+            return arg
+        
         return bool(re.fullmatch(r'\d+(\.\d+)?', arg))
+    
+    #rec method (O(logn))
+    @staticmethod
+    def recursionPow(number: int, pow: int):
+        if (pow == 1):
+            return number
+        
+        if (pow % 2 == 0):
+            value = BL.recursionPow(number, pow / 2)
+            return value * value
+        return number * BL.recursionPow(number, pow - 1)
+        
+
     
     def concatFirstArg(self, char: int | str):
         self.firstArgStr.set(BL.concatArg(self.firstArgStr.get(), char))
         print(self.firstArgStr.get())
     
     def concatSecondArg(self, char: int | str):
-        self.secondArgStr = BL.concatArg(self.secondArgStr, char)
+        self.secondArgStr.set(BL.concatArg(self.secondArgStr.get(), char)) 
     
     def concatCurrentArg(self, char: int | str):
         if self.operation.value == Operations.Undefined.value:
@@ -101,11 +87,42 @@ class BL():
 
     def setOperation(self, operation: Operations):
         self.operation = operation
+    
+    def add(self):
+        self.firstArgStr.set(str(float(self.firstArgStr.get()) + float(self.secondArgStr.get())))
+        self.secondArgStr.set("0")
+
+    def sub(self):
+        self.firstArgStr.set(str(float(self.firstArgStr.get()) - float(self.secondArgStr.get())))
+        self.secondArgStr.set("0")
+
+    def div(self):
+        if float(self.secondArgStr.get()) == 0:
+            raise ValueError("0 division is not defined")
+         
+        self.firstArgStr.set(str(float(self.firstArgStr.get()) / float(self.secondArgStr.get())))
+        self.secondArgStr.set("0")
+
+    def mul(self):
+        self.firstArgStr.set(str(float(self.firstArgStr.get()) * float(self.secondArgStr.get())))
+        self.secondArgStr.set("0")
+
+    #recursion
+    def pow(self):
+        self.firstArgStr.set(str(BL.recursionPow(float(self.firstArgStr.get()), int(self.secondArgStr.get()))))
+        self.secondArgStr.set("0")
 
     def fireResult(self):
         if (self.operation == Operations.Add):
-            self.firstArgStr.set(str(float(self.firstArgStr.get()) + float(self.secondArgStr)))
-            self.secondArgStr = "0"
+            self.add()
+        elif (self.operation == Operations.Sub):
+            self.sub()
+        elif (self.operation == Operations.Mul):
+            self.mul()
+        elif (self.operation == Operations.Div):
+            self.div()
+        elif (self.operation == Operations.Pow):
+            self.pow()
     
     # @property 
     # def firstArgStr(self):
@@ -132,7 +149,7 @@ class BL():
 #Add type to handler
 class CharButton():
     def __init__(self, app, value: str, handler):
-        if (not BL.isValidArg(value)):
+        if (not BL.isValidArg(value) and value != "."):
             raise ValueError(f"Wrong value has been binded to char button: {value}")
         
         self.__app = app
@@ -148,19 +165,30 @@ class UI():
 
         self.bl = BL()
 
+        self.displayedStr = ctk.StringVar(value=(self.bl.firstArgStr.get() + " " + self.bl.secondArgStr.get()))
         self.mountArgControls()
         self.mountForm()
         self.mountOperationsControls()
 
     def mountForm(self):
-        self.msg = ctk.CTkLabel(self.__app, textvariable=self.bl.firstArgStr)
-        self.msg.pack()
+        self.msg1 = ctk.CTkLabel(self.__app, textvariable=self.bl.firstArgStr)
+        self.msg12 = ctk.CTkLabel(self.__app, textvariable=self.bl.secondArgStr)
+        self.msg1.pack()
+        self.msg12.pack()
 
     def mountOperationsControls(self):
         buttonAdd = ctk.CTkButton(self.__app, height=40, width=40, text="+", command=lambda: self.bl.setOperation(Operations.Add))
+        buttonSub = ctk.CTkButton(self.__app, height=40, width=40, text="-", command=lambda: self.bl.setOperation(Operations.Sub))
+        buttonMul = ctk.CTkButton(self.__app, height=40, width=40, text="*", command=lambda: self.bl.setOperation(Operations.Mul))
+        buttonDiv = ctk.CTkButton(self.__app, height=40, width=40, text="/", command=lambda: self.bl.setOperation(Operations.Div))
+        buttonPow = ctk.CTkButton(self.__app, height=40, width=40, text="**", command=lambda: self.bl.setOperation(Operations.Pow))
         buttonEquals = ctk.CTkButton(self.__app, height=40, width=40, text="=", command=self.bl.fireResult)
 
         buttonAdd.pack()
+        buttonSub.pack()
+        buttonMul.pack()
+        buttonDiv.pack()
+        buttonPow.pack()
         buttonEquals.pack()
 
     def mountArgControls(self):
@@ -169,6 +197,9 @@ class UI():
 
             button = CharButton(self.__app, valueStr, handler=self.bl.concatCurrentArg)
             button.pack()
+
+        button = CharButton(self.__app, ".", handler=self.bl.concatCurrentArg)
+        button.pack()
 
 ui = UI(app)
 app.mainloop()
